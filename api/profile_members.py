@@ -2,6 +2,15 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from sqlalchemy.orm import Session
+from cqrs.members.command.create_handlers import AddMemberCommandHandler
+from cqrs.members.command.delete_handlers import DeleteMemberCommandHandler
+from cqrs.members.command.update_handlers import UpdateMemberCommandHandler
+from cqrs.members.commands import ProfileMemberCommand
+from cqrs.members.queries import ProfileMemberListQuery, ProfileMemberRecordQuery
+from cqrs.members.query.query_handlers import (
+    ListMemberQueryHandler,
+    RecordMemberQueryHandler,
+)
 from db_config.sqlalchemy_connect import SessionFactory
 from domain.request.members import ProfileMembersReq
 from domain.data.sqlalchemy_models import Profile_Members
@@ -21,7 +30,7 @@ def sess_db():
 
 @router.post("/profile_members/add")
 async def add_profile_members(req: ProfileMembersReq, sess: Session = Depends(sess_db)):
-    repo: ProfileMembersRepository = ProfileMembersRepository(sess)
+    handler = AddMemberCommandHandler(sess)
 
     profile_members = Profile_Members(
         id=req.id,
@@ -33,7 +42,9 @@ async def add_profile_members(req: ProfileMembersReq, sess: Session = Depends(se
         membership_type=req.membership_type,
         trainer_id=req.trainer_id,
     )
-    result = repo.insert_profile_members(profile_members)
+    command = ProfileMemberCommand()
+    command.details = profile_members
+    result = await handler.handle(command)
     if result == True:
         return profile_members
     else:
@@ -47,10 +58,11 @@ async def add_profile_members(req: ProfileMembersReq, sess: Session = Depends(se
 async def update_profile_members(
     id: int, req: ProfileMembersReq, sess: Session = Depends(sess_db)
 ):
+    handler = UpdateMemberCommandHandler(sess)
     profile_members_dict = req.dict(exclude_unset=True)
-    profile_members_dict.pop("gclass")
-    repo: ProfileMembersRepository = ProfileMembersRepository(sess)
-    result = repo.update_profile_members(id, profile_members_dict)
+    command = ProfileMemberCommand()
+    command.details = profile_members_dict
+    result = await handler.handle(id, command)
     if result:
         return JSONResponse(
             content={"message": "profile members updated successfully"},
@@ -64,8 +76,10 @@ async def update_profile_members(
 
 @router.delete("/profile_members/delete/{id}")
 async def delete_profile_members(id: int, sess: Session = Depends(sess_db)):
-    repo: ProfileMembersRepository = ProfileMembersRepository(sess)
-    result = repo.delete_profile_members(id)
+    handler = DeleteMemberCommandHandler(sess)
+    command = ProfileMemberCommand()
+    command.details["id"] = id
+    result = await handler.handle(command)
     if result:
         return JSONResponse(
             content={"message": "profile members deleted successfully"},
@@ -79,13 +93,13 @@ async def delete_profile_members(id: int, sess: Session = Depends(sess_db)):
 
 @router.get("/profile_members/list")
 async def list_profile_members(sess: Session = Depends(sess_db)):
-    repo: ProfileMembersRepository = ProfileMembersRepository(sess)
-    result = repo.get_all_profile_members()
-    return result
+    handler = ListMemberQueryHandler(sess)
+    query: ProfileMemberListQuery = await handler.handle()
+    return query.records
 
 
 @router.get("/profile_members/get/{id}")
 async def get_profile_members(id: int, sess: Session = Depends(sess_db)):
-    repo: ProfileMembersRepository = ProfileMembersRepository(sess)
-    result = repo.get_profile_members(id)
-    return result
+    handler = RecordMemberQueryHandler(sess)
+    query: ProfileMemberRecordQuery = await handler.handle(id)
+    return query.record
