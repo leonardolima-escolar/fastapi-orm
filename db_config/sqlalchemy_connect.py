@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from domain.data.sqlalchemy_models import Base
 
-DB_URL = "postgresql://thiago:@localhost:5432/FastAPI"
+DB_URL = "postgresql://postgres:sql@localhost:5432/fastapi-orm"
 
 engine = create_engine(DB_URL)
 
